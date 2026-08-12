@@ -9,6 +9,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.Objects;
 import java.util.Optional;
 
 /** Read-only native container; all state is received from the server. */
@@ -49,8 +50,15 @@ public final class DiagnosticsMenu extends AbstractContainerMenu {
     }
 
     public void applySnapshot(DiagnosticsSnapshot snapshot) {
-        if (this.snapshot != null && !this.snapshot.sessionId().equals(snapshot.sessionId())) {
-            throw new IllegalArgumentException("snapshot_session_mismatch");
+        Objects.requireNonNull(snapshot, "snapshot");
+        if (this.snapshot != null) {
+            if (!this.snapshot.sessionId().equals(snapshot.sessionId())) {
+                throw new IllegalArgumentException("snapshot_session_mismatch");
+            }
+            if (!this.snapshot.equals(snapshot)) {
+                throw new IllegalArgumentException("snapshot_after_initial");
+            }
+            return;
         }
         this.snapshot = snapshot;
         this.errorMessageKey = null;
