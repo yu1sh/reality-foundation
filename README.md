@@ -14,8 +14,32 @@ feature.
 - ForgeGradle 6.0.54
 - Gradle 8.8, with the distribution SHA recorded in `supply-chain/`
 - Eclipse Temurin JDK 17.0.20+8, Linux x64, class major 61
-- `reality-core` source ref `aa9956e03a8d163d1d0a2bbdcf38cc328fc37397`
+- `reality-core` approved migration source provenance `5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22`
+- canonical workspace child baseline `libs/reality-core@fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`
 - network protocol `1`, API schema `foundation.api.v1`, release train `rt1-foundation`
+
+## `reality-core` dependency contract
+
+The `reality-core` reference in this repository has two deliberately separate
+meanings. `reality_core_ref` and the `source_ref` in
+`supply-chain/toolchain-manifest.json` identify the legacy source provenance
+approved by the migration authority: `5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22`.
+`reality_core_child_baseline` identifies the initial Git commit of the
+canonical new-workspace child repository: `libs/reality-core` at
+`fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`. A source provenance is not a child
+repository commit and these values must not be interchanged.
+
+The previously recorded ref
+`aa9956e03a8d163d1d0a2bbdcf38cc328fc37397` has no matching approved `MIGRATE`
+entry in the new workspace and is not an accepted Foundation dependency ref.
+The pre-existing `COMPATIBILITY.md`, `FoundationVersion.java`, and
+`scripts/verify_toolchain.py` assertions that still contain this old ref are
+intentionally outside this contract-only change; they require a separate
+source/API/verification follow-up before the next compile or gate run.
+This contract record does not switch the `settings.gradle` dependency path or
+claim a build. A follow-up task must select the canonical child checkout and
+verify its HEAD against the recorded child baseline before compile or smoke
+validation.
 
 The JDK archive SHA in `supply-chain/toolchain-manifest.json` is acquisition
 evidence for the verified archive. It does not claim that an
@@ -104,10 +128,14 @@ python3 scripts/verify_local_forge_derivative.py --self-test
 python3 scripts/run_server_smoke.py --repo-root . --gradle-command ./gradlew --java-home "${JAVA_HOME}"
 ```
 
-The reviewed `reality-core` checkout is required as a sibling source
-checkout, or can be selected with `-PrealityCoreDir=...`. The custom launcher
-accepts only Gradle 8.8 and verifies the recorded distribution SHA when it
-downloads the distribution.
+The reviewed `reality-core` checkout is required, or can be selected with
+`-PrealityCoreDir=...`. The canonical new-workspace checkout is
+`../../libs/reality-core` relative to this repository. The current
+`settings.gradle` path resolution remains unchanged by this contract-only
+record; the follow-up dependency-path task must select that checkout and
+verify the recorded child baseline. The custom launcher accepts only Gradle
+8.8 and verifies the recorded distribution SHA when it downloads the
+distribution.
 
 `gradle/verification-metadata.xml` is the strict Gradle SHA-256 allowlist for
 all downloaded inputs, including ForgeGradle, Forge/MCP inputs, and JUnit.
