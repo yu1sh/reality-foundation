@@ -13,7 +13,8 @@
 | Gradle | 8.8 | wrapper and manifest |
 | Gradle distribution SHA-256 | `a4b4158601f8636cdeeab09bd76afb640030bb5b144aafe261a5e8af027dc612` | launcher/manifest |
 | Forge MDK SHA-256 | `73e0122becd05e39b47eced54e030380d66411850ed86786a2d58ecd886b0451` | manifest |
-| reality-core | `aa9956e03a8d163d1d0a2bbdcf38cc328fc37397` | required sibling source ref |
+| reality-core source provenance | `5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22` | approved migration source provenance |
+| reality-core child baseline | `fd93d533ba3e9aa63e182a4d0ba9da0e82b24728` | canonical new-workspace child repository initial Git commit |
 
 The workflow verifies `java -version` at 17.0.20 and
 `java.runtime.version` at 17.0.20+8. It rejects `17`, `17.x`, `latest`, and

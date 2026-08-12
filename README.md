@@ -29,17 +29,12 @@ canonical new-workspace child repository: `libs/reality-core` at
 `fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`. A source provenance is not a child
 repository commit and these values must not be interchanged.
 
-The previously recorded ref
-`aa9956e03a8d163d1d0a2bbdcf38cc328fc37397` has no matching approved `MIGRATE`
-entry in the new workspace and is not an accepted Foundation dependency ref.
-The pre-existing `COMPATIBILITY.md`, `FoundationVersion.java`, and
-`scripts/verify_toolchain.py` assertions that still contain this old ref are
-intentionally outside this contract-only change; they require a separate
-source/API/verification follow-up before the next compile or gate run.
-This contract record does not switch the `settings.gradle` dependency path or
-claim a build. A follow-up task must select the canonical child checkout and
-verify its HEAD against the recorded child baseline before compile or smoke
-validation.
+The previously recorded unapproved ref has no matching approved `MIGRATE` entry
+in the new workspace and is not an accepted Foundation dependency ref.
+The compatibility record, public version coordinate, CI checkout assertion,
+and toolchain self-test now use the approved source provenance above. The
+canonical child baseline remains a separate value and must be verified against
+the child checkout before compile or smoke validation.
 
 The JDK archive SHA in `supply-chain/toolchain-manifest.json` is acquisition
 evidence for the verified archive. It does not claim that an
@@ -128,14 +123,12 @@ python3 scripts/verify_local_forge_derivative.py --self-test
 python3 scripts/run_server_smoke.py --repo-root . --gradle-command ./gradlew --java-home "${JAVA_HOME}"
 ```
 
-The reviewed `reality-core` checkout is required, or can be selected with
-`-PrealityCoreDir=...`. The canonical new-workspace checkout is
-`../../libs/reality-core` relative to this repository. The current
-`settings.gradle` path resolution remains unchanged by this contract-only
-record; the follow-up dependency-path task must select that checkout and
-verify the recorded child baseline. The custom launcher accepts only Gradle
-8.8 and verifies the recorded distribution SHA when it downloads the
-distribution.
+The canonical new-workspace `reality-core` checkout at
+`../../libs/reality-core` relative to this repository is required by default;
+an isolated reviewed checkout can be selected with `-PrealityCoreDir=...`.
+Verify the selected child checkout against the recorded baseline before
+compile or smoke validation. The custom launcher accepts only Gradle 8.8 and
+verifies the recorded distribution SHA when it downloads the distribution.
 
 `gradle/verification-metadata.xml` is the strict Gradle SHA-256 allowlist for
 all downloaded inputs, including ForgeGradle, Forge/MCP inputs, and JUnit.

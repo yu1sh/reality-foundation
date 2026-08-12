@@ -7,8 +7,9 @@ public final class FoundationVersion {
     public static final int NETWORK_PROTOCOL = 1;
     public static final String API_SCHEMA = "foundation.api.v1";
     public static final String RELEASE_TRAIN = "rt1-foundation";
+    /** Approved migration source provenance; this is not the child repository commit. */
     public static final String REALITY_CORE_REF =
-            "aa9956e03a8d163d1d0a2bbdcf38cc328fc37397";
+            "5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22";
 
     private FoundationVersion() {
     }

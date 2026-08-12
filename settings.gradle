@@ -32,11 +32,11 @@ include ':reality-foundation-api'
 project(':reality-foundation-api').projectDir = file('foundation-api')
 include 'forge-1.20.1'
 
-// The public build checks out the reviewed reality-core repository next to
-// this repository. A Maven fallback is deliberately not provided: a build
-// without the reviewed core ref must fail rather than silently resolving a
-// different snapshot.
-def corePath = providers.gradleProperty('realityCoreDir').orElse('../reality-core').get()
+// The canonical new-workspace child repository is in ../../libs/reality-core.
+// An isolated reviewed checkout may still be selected with -PrealityCoreDir.
+// A Maven fallback is deliberately not provided: a build without the reviewed
+// core ref must fail rather than silently resolving a different snapshot.
+def corePath = providers.gradleProperty('realityCoreDir').orElse('../../libs/reality-core').get()
 def coreDir = file(corePath)
 if (!coreDir.isDirectory()) {
     throw new GradleException("Reviewed reality-core checkout is required at ${coreDir}")
