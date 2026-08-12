@@ -14,8 +14,9 @@ feature.
 - ForgeGradle 6.0.54
 - Gradle 8.8, with the distribution SHA recorded in `supply-chain/`
 - Eclipse Temurin JDK 17.0.20+8, Linux x64, class major 61
-- `reality-core` approved migration source provenance `5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22`
-- canonical workspace child baseline `libs/reality-core@fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`
+- `reality-core` migration source provenance `5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22` (evidence only)
+- canonical public remote `https://github.com/yu1sh/reality-core.git`, `main@fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`
+- canonical workspace child `libs/reality-core@fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`
 - network protocol `1`, API schema `foundation.api.v1`, release train `rt1-foundation`
 
 ## `reality-core` dependency contract
@@ -24,17 +25,20 @@ The `reality-core` reference in this repository has two deliberately separate
 meanings. `reality_core_ref` and the `source_ref` in
 `supply-chain/toolchain-manifest.json` identify the legacy source provenance
 approved by the migration authority: `5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22`.
-`reality_core_child_baseline` identifies the initial Git commit of the
-canonical new-workspace child repository: `libs/reality-core` at
-`fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`. A source provenance is not a child
+That value is migration evidence only and is not the CI checkout ref.
+`reality_core_child_baseline` identifies the canonical child repository and its
+public remote, `https://github.com/yu1sh/reality-core.git`, at
+`libs/reality-core` `main@fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`. CI checks out
+and asserts that remote child commit. A source provenance is not a child
 repository commit and these values must not be interchanged.
 
 The previously recorded unapproved ref has no matching approved `MIGRATE` entry
 in the new workspace and is not an accepted Foundation dependency ref.
-The compatibility record, public version coordinate, CI checkout assertion,
-and toolchain self-test now use the approved source provenance above. The
-canonical child baseline remains a separate value and must be verified against
-the child checkout before compile or smoke validation.
+The compatibility record, public version metadata, and source metadata continue
+to preserve the approved source provenance above. The CI checkout assertion and
+toolchain self-test use the canonical remote child commit. The canonical child
+baseline must be verified against the child checkout before compile or smoke
+validation.
 
 The JDK archive SHA in `supply-chain/toolchain-manifest.json` is acquisition
 evidence for the verified archive. It does not claim that an
@@ -124,11 +128,12 @@ python3 scripts/run_server_smoke.py --repo-root . --gradle-command ./gradlew --j
 ```
 
 The canonical new-workspace `reality-core` checkout at
-`../../libs/reality-core` relative to this repository is required by default;
-an isolated reviewed checkout can be selected with `-PrealityCoreDir=...`.
-Verify the selected child checkout against the recorded baseline before
-compile or smoke validation. The custom launcher accepts only Gradle 8.8 and
-verifies the recorded distribution SHA when it downloads the distribution.
+`../../libs/reality-core` relative to this repository, matching the public
+remote at the recorded child commit, is required by default; an isolated
+reviewed checkout can be selected with `-PrealityCoreDir=...`. Verify the
+selected child checkout against the recorded baseline before compile or smoke
+validation. The custom launcher accepts only Gradle 8.8 and verifies the
+recorded distribution SHA when it downloads the distribution.
 
 `gradle/verification-metadata.xml` is the strict Gradle SHA-256 allowlist for
 all downloaded inputs, including ForgeGradle, Forge/MCP inputs, and JUnit.
