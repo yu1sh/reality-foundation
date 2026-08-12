@@ -1,0 +1,518 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+
+plugins {
+    id 'net.minecraftforge.gradle' version '6.0.54'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = mod_id
+}
+
+// Runtime evidence always uses an isolated invocation directory when the
+// verifier supplies one. The normal developer default remains ignored `run/`.
+def foundationRunDir = providers.gradleProperty('foundationRunDir')
+        .map { value -> file(value) }
+        .orElse(file('run'))
+        .get()
+def foundationEvidenceRunId = providers.gradleProperty('foundationEvidenceRunId').orElse('').get()
+if (!foundationEvidenceRunId.isEmpty()
+        && !(foundationEvidenceRunId ==~ /[a-z0-9][a-z0-9-]{15,127}/)) {
+    throw new GradleException('foundationEvidenceRunId must be a bounded lowercase execution ID')
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+minecraft {
+    mappings channel: mapping_channel, version: mapping_version
+    copyIdeResources = true
+
+    runs {
+        client {
+            workingDirectory foundationRunDir
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+        server {
+            workingDirectory foundationRunDir
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+            args '--nogui'
+            if (!foundationEvidenceRunId.isEmpty()) {
+                property 'reality.foundation.evidence.run-id', foundationEvidenceRunId
+            }
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+        gameTestServer {
+            workingDirectory foundationRunDir
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'info'
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--nogui'
+            if (!foundationEvidenceRunId.isEmpty()) {
+                property 'reality.foundation.evidence.run-id', foundationEvidenceRunId
+            }
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+    }
+}
+
+def foundationApiJarJarDependency = project.dependencies.project(path: ':reality-foundation-api')
+def realityCoreJarJarDependency = project.dependencies.create(
+        'io.github.yu1sh.reality:reality-core:0.1.0-SNAPSHOT')
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    implementation project(':reality-foundation-api')
+
+    // ForgeGradle's userdev launch classpath is separate from Gradle's
+    // runtimeClasspath. Keep the API/core as launch libraries for dedicated
+    // dev/GameTest runs; the production jar still owns exactly one Jar-in-Jar
+    // copy of each through the explicit jarJar configuration below.
+    minecraftLibrary project(':reality-foundation-api')
+    minecraftLibrary 'io.github.yu1sh.reality:reality-core:0.1.0-SNAPSHOT'
+
+    // Jar-in-Jar is explicit: the runtime jar contains one copy of the API
+    // and one copy of the reviewed core, with Forge metadata describing both.
+    jarJar foundationApiJarJarDependency
+    jarJar realityCoreJarJarDependency
+}
+
+jarJar {
+    enable()
+    // Forge's metadata parser needs both a fixed version and a singleton
+    // Maven range. The brackets contain one exact version; no dynamic range
+    // or selector is used.
+    pin(foundationApiJarJarDependency, '0.1.0-SNAPSHOT')
+    ranged(foundationApiJarJarDependency, '[0.1.0-SNAPSHOT]')
+    pin(realityCoreJarJarDependency, '0.1.0-SNAPSHOT')
+    ranged(realityCoreJarJarDependency, '[0.1.0-SNAPSHOT]')
+}
+
+// ForgeGradle creates this one JAR locally after it verifies and transforms
+// downloaded Forge inputs. Its raw ZIP SHA varies with generated timestamps,
+// so Gradle's precisely-scoped trusted-artifact entry is paired with this
+// canonical-content verifier. The task resolves only the exact mapped Forge
+// coordinate and fails closed for a missing, duplicate, renamed, or changed
+// derivative. No downloaded artifact is trusted by this exception.
+def localMappedForgeComponent = 'net.minecraftforge:forge:1.20.1-47.4.10_mapped_official_1.20.1'
+def localMappedForgeFile = 'forge-1.20.1-47.4.10_mapped_official_1.20.1.jar'
+def localMappedForgeManifest = rootProject.file('supply-chain/local-forge-derivative.json')
+def localMappedForgeCanonicalAlgorithm = 'reality-foundation-forge-local-derivative-canonical-v1'
+def verifyLocalForgeDerivative = tasks.register('verifyLocalForgeDerivative') {
+    group = 'verification'
+    description = 'Verifies the canonical content digest of the one local mapped Forge JAR.'
+    inputs.file(localMappedForgeManifest)
+    inputs.property('component', localMappedForgeComponent)
+    inputs.property('filename', localMappedForgeFile)
+    outputs.upToDateWhen { false }
+    doLast {
+        def matches = configurations.compileClasspath.resolvedConfiguration.resolvedArtifacts.findAll { artifact ->
+            def module = artifact.moduleVersion.id
+            module.group == 'net.minecraftforge'
+                    && module.name == 'forge'
+                    && module.version == '1.20.1-47.4.10_mapped_official_1.20.1'
+        }
+        if (matches.size() != 1) {
+            throw new GradleException("Expected exactly one local mapped Forge derivative, got ${matches.size()}")
+        }
+        File derivative = matches[0].file
+        if (derivative.name != localMappedForgeFile) {
+            throw new GradleException("Unexpected local mapped Forge derivative filename: ${derivative.name}")
+        }
+        exec {
+            workingDir rootProject.projectDir
+            commandLine 'python3', rootProject.file('scripts/verify_local_forge_derivative.py').absolutePath,
+                    '--jar', derivative.absolutePath,
+                    '--component', localMappedForgeComponent,
+                    '--manifest', localMappedForgeManifest.absolutePath
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+    dependsOn verifyLocalForgeDerivative
+}
+
+// Archive/reobfuscation/SBOM tasks are independent artifact-production paths;
+// they must not bypass the derivative gate even when compilation output is
+// already present from an earlier invocation.
+tasks.withType(AbstractArchiveTask).configureEach {
+    dependsOn verifyLocalForgeDerivative
+}
+tasks.matching { it.name in ['reobfJar', 'reobfJarJar', 'runtimeSbom'] }.configureEach {
+    dependsOn verifyLocalForgeDerivative
+}
+
+def replaceProperties = [
+        minecraft_version      : minecraft_version,
+        minecraft_version_range: minecraft_version_range,
+        forge_version          : forge_version,
+        forge_version_range    : forge_version_range,
+        loader_version_range   : loader_version_range,
+        mod_id                 : mod_id,
+        mod_name               : mod_name,
+        mod_license            : mod_license,
+        mod_version            : mod_version,
+        mod_group_id           : mod_group_id
+]
+
+tasks.named('processResources', ProcessResources).configure {
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties
+    }
+}
+
+jar {
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : 'Reality contributors',
+                'Specification-Version'  : '1',
+                'Implementation-Title'   : project.name,
+                'Implementation-Version' : project.version,
+                'Implementation-Vendor'  : 'Reality contributors',
+                'Implementation-Timestamp': '0'
+        ])
+    }
+    finalizedBy 'reobfJar'
+}
+
+tasks.register('modSourcesJar', Jar) {
+    archiveClassifier = 'sources'
+    from sourceSets.main.allSource
+    reproducibleFileOrder = true
+    preserveFileTimestamps = false
+}
+
+tasks.register('copyGameTestStructures') {
+    group = 'verification'
+    dependsOn tasks.named('processResources')
+    doLast {
+        copy {
+            from layout.buildDirectory.dir('resources/main/gameteststructures')
+            into new File(foundationRunDir, 'gameteststructures')
+        }
+    }
+}
+
+// ForgeGradle materializes run configuration tasks after the Minecraft block;
+// configure lazily so this remains compatible with the MDK task realization
+// order while still making the structure copy a hard prerequisite.
+tasks.matching { it.name == 'runGameTestServer' }.configureEach {
+    dependsOn tasks.named('copyGameTestStructures')
+    dependsOn verifyLocalForgeDerivative
+}
+
+def finalModJar = layout.buildDirectory.file("libs/${mod_id}-${mod_version}-all.jar")
+
+publishing {
+    publications {
+        mod(MavenPublication) {
+            artifactId = 'reality-foundation'
+            artifact(finalModJar) {
+                builtBy { tasks.getByName('reobfJarJar') }
+            }
+            artifact(tasks.named('modSourcesJar'))
+            pom {
+                name = 'Reality Foundation Forge Mod'
+                description = 'Forge 1.20.1 server-authoritative foundation diagnostics Mod'
+                url = 'https://github.com/yu1sh/reality-foundation'
+                licenses {
+                    license {
+                        name = 'Apache License, Version 2.0'
+                        url = 'https://www.apache.org/licenses/LICENSE-2.0'
+                        distribution = 'repo'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'reality-contributors'
+                        name = 'Reality contributors'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:https://github.com/yu1sh/reality-foundation.git'
+                    developerConnection = 'scm:git:ssh://git@github.com/yu1sh/reality-foundation.git'
+                    url = 'https://github.com/yu1sh/reality-foundation'
+                }
+                withXml {
+                    def props = asNode().appendNode('properties')
+                    props.appendNode('reality.foundation.api.artifactId', 'reality-foundation-api')
+                    props.appendNode('reality.foundation.api.version', '0.1.0-SNAPSHOT')
+                    props.appendNode('reality.foundation.core.version', '0.1.0-SNAPSHOT')
+                    props.appendNode('reality.foundation.core.ref', reality_core_ref)
+                    props.appendNode('reality.foundation.jarjar', 'reality-foundation-api/core singleton exact')
+                    props.appendNode('reality.foundation.forge', forge_version)
+                    props.appendNode('reality.foundation.minecraft', minecraft_version)
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = 'staging'
+            url = rootProject.layout.buildDirectory.dir('staging-repository')
+        }
+    }
+}
+
+tasks.register('forgeJavaMajorCheck') {
+    group = 'verification'
+    dependsOn tasks.named('classes')
+    doLast {
+        fileTree(layout.buildDirectory.dir('classes/java/main')).matching { include '**/*.class' }.each { classFile ->
+            classFile.withInputStream { input ->
+                byte[] header = new byte[8]
+                if (input.read(header) != 8 || (header[0] & 0xff) != 0xCA
+                        || (header[1] & 0xff) != 0xFE
+                        || (header[2] & 0xff) != 0xBA || (header[3] & 0xff) != 0xBE
+                        || ((header[6] & 0xff) << 8 | (header[7] & 0xff)) != 61) {
+                    throw new GradleException("Non-Java-17 class in ${classFile}")
+                }
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('forgeJavaMajorCheck')
+    dependsOn tasks.named('reobfJarJar')
+    dependsOn 'runtimeSbom'
+}
+
+def runtimeSbomOutput = layout.buildDirectory.file(
+        'reports/sbom/reality-foundation-runtime-sbom.json')
+def foundationApiJar = project(':reality-foundation-api').tasks.named('jar').flatMap { it.archiveFile }
+def realityCoreDir = project.gradle.ext.realityCoreDir as File
+def realityCoreJar = project.layout.file(project.provider {
+    new File(realityCoreDir, 'build/libs/reality-core-0.1.0-SNAPSHOT.jar')
+})
+
+def sha256Hex = { File file ->
+    MessageDigest digest = MessageDigest.getInstance('SHA-256')
+    file.withInputStream { input ->
+        byte[] buffer = new byte[8192]
+        int read
+        while ((read = input.read(buffer)) != -1) {
+            digest.update(buffer, 0, read)
+        }
+    }
+    digest.digest().collect { byteValue -> String.format('%02x', byteValue & 0xff) }.join()
+}
+
+def sha256HexBytes = { byte[] bytes ->
+    MessageDigest digest = MessageDigest.getInstance('SHA-256')
+    digest.update(bytes)
+    digest.digest().collect { byteValue -> String.format('%02x', byteValue & 0xff) }.join()
+}
+
+tasks.register('runtimeSbom') {
+    group = 'verification'
+    description = 'Writes a deterministic role-aware runtime SBOM.'
+    dependsOn 'reobfJarJar'
+    dependsOn ':reality-foundation-api:jar'
+    inputs.files({
+        configurations.runtimeClasspath.resolvedConfiguration.resolvedArtifacts.collect { it.file }
+    })
+    inputs.file(foundationApiJar)
+    inputs.file(realityCoreJar)
+    inputs.file(finalModJar)
+    inputs.file(localMappedForgeManifest)
+    outputs.file(runtimeSbomOutput)
+    doLast {
+        def resolvedArtifacts = configurations.runtimeClasspath.resolvedConfiguration
+                .resolvedArtifacts.toList()
+        if (resolvedArtifacts.isEmpty()) {
+            throw new GradleException('runtimeClasspath resolved no artifacts; refusing to write SBOM')
+        }
+        def records = resolvedArtifacts.collect { artifact ->
+            def module = artifact.moduleVersion.id
+            [group: module.group.toString(), name: module.name.toString(),
+             version: module.version.toString(), file: artifact.file,
+             sha256: sha256Hex(artifact.file)]
+        }.sort { left, right ->
+            "${left.group}\u0000${left.name}\u0000${left.version}\u0000${left.file.name}" \
+                    <=> "${right.group}\u0000${right.name}\u0000${right.version}\u0000${right.file.name}"
+        }
+        def recordFor = { String groupId, String name ->
+            def matches = records.findAll { it.group == groupId && it.name == name }
+            if (matches.size() != 1) {
+                throw new GradleException(
+                        "Expected exactly one resolved runtime artifact for ${groupId}:${name}, got ${matches.size()}")
+            }
+            matches[0]
+        }
+        def apiRecord = recordFor('io.github.yu1sh.reality', 'reality-foundation-api')
+        def coreRecord = recordFor('io.github.yu1sh.reality', 'reality-core')
+        def forgeRecord = recordFor('net.minecraftforge', 'forge')
+        if ("${forgeRecord.group}:${forgeRecord.name}:${forgeRecord.version}" != localMappedForgeComponent
+                || forgeRecord.file.name != localMappedForgeFile) {
+            throw new GradleException('Runtime SBOM resolved an unexpected local mapped Forge derivative')
+        }
+        def localDerivative = new JsonSlurper().parse(localMappedForgeManifest)
+        String canonicalForgeSha256 = localDerivative.canonical_sha256?.toString()
+        if (localDerivative.algorithm != localMappedForgeCanonicalAlgorithm
+                || localDerivative.component != localMappedForgeComponent
+                || localDerivative.file != localMappedForgeFile
+                || !(canonicalForgeSha256 ==~ /[0-9a-f]{64}/)) {
+            throw new GradleException('Runtime SBOM local Forge canonical manifest is not the reviewed contract')
+        }
+        // The task depends on verifyLocalForgeDerivative. Use that verified
+        // canonical content digest instead of ForgeGradle's volatile raw ZIP
+        // SHA so two clean cache builds produce the same SBOM.
+        forgeRecord.sha256 = canonicalForgeSha256
+        forgeRecord.hashBasis = localMappedForgeCanonicalAlgorithm
+        def minecraftRecords = records.findAll { it.group == 'net.minecraft' }
+        if (minecraftRecords.isEmpty()) {
+            throw new GradleException('No resolved net.minecraft runtime artifacts; refusing to write SBOM')
+        }
+
+        File apiSource = foundationApiJar.get().asFile
+        File coreSource = realityCoreJar.get().asFile
+        File modJar = finalModJar.get().asFile
+        if (!apiSource.isFile() || !coreSource.isFile() || !modJar.isFile()) {
+            throw new GradleException('Required built API/core/final mod artifacts are missing')
+        }
+        def nestedHashes = [:]
+        def metadataEntry
+        new java.util.zip.ZipFile(modJar).withCloseable { archive ->
+            metadataEntry = archive.getEntry('META-INF/jarjar/metadata.json')
+            if (metadataEntry == null) {
+                throw new GradleException('Final mod jar has no Jar-in-Jar metadata')
+            }
+            def metadata = new groovy.json.JsonSlurper().parse(archive.getInputStream(metadataEntry))
+            metadata.jars.each { item ->
+                String artifact = item.identifier.artifact.toString()
+                String path = item.path.toString()
+                def entry = archive.getEntry(path)
+                if (entry == null) {
+                    throw new GradleException("Final mod jar is missing nested entry ${path}")
+                }
+                nestedHashes[artifact] = sha256HexBytes(archive.getInputStream(entry).bytes)
+            }
+        }
+        if (nestedHashes.keySet() != ['reality-foundation-api', 'reality-core'].toSet()) {
+            throw new GradleException("Unexpected bundled Jar-in-Jar set: ${nestedHashes.keySet()}")
+        }
+        if (nestedHashes['reality-foundation-api'] != sha256Hex(apiSource)
+                || nestedHashes['reality-core'] != sha256Hex(coreSource)) {
+            throw new GradleException('Nested API/core hash does not match its source artifact')
+        }
+
+        def component = { Map record, String scope, String role, boolean bundled,
+                          String sourceRef, String licenseName, String licenseUrl,
+                          Map<String, String> extraProperties = [:] ->
+            def item = new LinkedHashMap()
+            item.put('type', 'library')
+            item.put('group', record.group)
+            item.put('name', record.name)
+            item.put('version', record.version)
+            item.put('scope', 'required')
+            item.put('bom-ref', "pkg:maven/${record.group}/${record.name}@${record.version}")
+            item.put('purl', "pkg:maven/${record.group}/${record.name}@${record.version}")
+            item.put('hashes', [[alg: 'SHA-256', content: record.sha256]])
+            item.put('licenses', [[license: [name: licenseName, url: licenseUrl]]])
+            def properties = [
+                    [name: 'reality.role', value: role],
+                    [name: 'reality.bundled', value: Boolean.toString(bundled)],
+                    [name: 'reality.configurations', value: scope],
+                    [name: 'reality.sourceRef', value: sourceRef],
+                    [name: 'reality.licenseQualification', value: 'reference-recorded']
+            ]
+            extraProperties.each { key, value -> properties << [name: key, value: value] }
+            item.put('properties', properties)
+            item
+        }
+        def components = []
+        components << component(apiRecord, 'compile,runtime', 'bundled-jar-in-jar', true,
+                'foundation.api.v1', 'Apache-2.0', 'https://www.apache.org/licenses/LICENSE-2.0',
+                    ['reality.nestedJarEntrySha256': nestedHashes['reality-foundation-api'],
+                 'reality.sourceArtifactSha256': sha256Hex(apiSource)])
+        components << component(coreRecord, 'compile,runtime', 'bundled-jar-in-jar', true,
+                reality_core_ref, 'Apache-2.0', 'https://www.apache.org/licenses/LICENSE-2.0',
+                ['reality.nestedJarEntrySha256': nestedHashes['reality-core'],
+                 'reality.sourceArtifactSha256': sha256Hex(coreSource)])
+        components << component(forgeRecord, 'provided-runtime', 'provided-forge-runtime', false,
+                "forge-${forge_version}", 'LGPL-2.1-only',
+                'https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html',
+                ['reality.hashBasis': forgeRecord.hashBasis,
+                 'reality.canonicalContentSha256': forgeRecord.sha256])
+        minecraftRecords.each { record ->
+            components << component(record, 'provided-runtime', 'provided-minecraft-runtime', false,
+                    'official-1.20.1', 'Minecraft EULA/Usage Guidelines',
+                    'https://www.minecraft.net/en-us/eula')
+        }
+        components = components.sort { left, right ->
+            "${left.group}\u0000${left.name}\u0000${left.version}" \
+                    <=> "${right.group}\u0000${right.name}\u0000${right.version}"
+        }
+        def rootRef = "pkg:maven/${project.group}/${mod_id}@${mod_version}"
+        def rootComponent = [
+                type: 'application',
+                group: project.group.toString(),
+                name: mod_id,
+                version: mod_version,
+                'bom-ref': rootRef,
+                purl: rootRef,
+                hashes: [[alg: 'SHA-256', content: sha256Hex(modJar)]],
+                licenses: [[license: [name: 'Apache-2.0',
+                                      url: 'https://www.apache.org/licenses/LICENSE-2.0']]]
+        ]
+        def closure = records.collect { record ->
+            def entry = [group: record.group, name: record.name, version: record.version,
+                         file: record.file.name, sha256: record.sha256,
+                         ownership: (record.group == 'io.github.yu1sh.reality'
+                                 && ['reality-foundation-api', 'reality-core'].contains(record.name))
+                                 ? 'this-repo-bundled' : 'formal-forge-minecraft-distribution-sbom']
+            if (record.containsKey('hashBasis')) {
+                entry.hashBasis = record.hashBasis
+            }
+            entry
+        }
+        def dependency = [
+                ref: rootRef,
+                dependsOn: components.collect { it['bom-ref'] }
+        ]
+        def document = [
+                bomFormat: 'CycloneDX',
+                specVersion: '1.5',
+                version: 1,
+                metadata: [component: rootComponent,
+                           properties: [[name: 'reality.runtimeClosureCount',
+                                         value: Integer.toString(closure.size())],
+                                        [name: 'reality.licenseBoundary',
+                                         value: 'Forge/Minecraft supplied runtime closure is qualified by the formal distribution SBOM; this module owns only listed direct/provided/bundled components.']]],
+                components: components,
+                dependencies: [dependency],
+                'x-reality-runtime-closure': closure
+        ]
+        File output = runtimeSbomOutput.get().asFile
+        output.parentFile.mkdirs()
+        output.setText(JsonOutput.prettyPrint(JsonOutput.toJson(document)) + '\n', 'UTF-8')
+    }
+}

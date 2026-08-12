@@ -1,0 +1,168 @@
+import groovy.xml.XmlSlurper
+
+plugins {
+    id 'base'
+}
+
+allprojects {
+    group = 'io.github.yu1sh.reality'
+    version = '0.1.0-SNAPSHOT'
+
+    repositories {
+        maven { url = 'https://maven.minecraftforge.net' }
+        // Mojang's official library host publishes the reviewed runtime JARs
+        // without Maven POM metadata. Restrict Gradle to artifact metadata
+        // and the Mojang group so a clean ForgeGradle cache can resolve those
+        // JAR-only coordinates without weakening dependency verification.
+        maven {
+            url = 'https://libraries.minecraft.net'
+            metadataSources {
+                artifact()
+            }
+            content {
+                includeGroup('com.mojang')
+            }
+        }
+        mavenCentral()
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+        withSourcesJar()
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 17
+    }
+
+    tasks.withType(AbstractArchiveTask).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+        dirMode = 0755
+        fileMode = 0644
+    }
+
+    dependencies {
+        testImplementation platform('org.junit:junit-bom:5.11.4')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+        reports.html.required = false
+    }
+}
+
+/**
+ * Local-only release verification. It publishes both coordinates into the
+ * ignored build/staging-repository directory, then checks that the API POM is
+ * Minecraft/Forge-free and the Mod POM records the exact bundled contract.
+ * No remote repository is configured by this task.
+ */
+tasks.register('verifyReleaseStaging') {
+    group = 'verification'
+    dependsOn ':reality-foundation-api:publishMavenJavaPublicationToStagingRepository'
+    dependsOn ':forge-1.20.1:publishModPublicationToStagingRepository'
+    doLast {
+        File staging = layout.buildDirectory.dir('staging-repository').get().asFile
+        File apiDir = new File(staging,
+                'io/github/yu1sh/reality/reality-foundation-api/0.1.0-SNAPSHOT')
+        if (new File(staging, 'io/github/yu1sh/reality/foundation-api').exists()
+                || new File(staging, 'io/github/yu1sh/reality/reality-foundation-api/0.1.0-SNAPSHOT/foundation-api-0.1.0-SNAPSHOT.pom').exists()) {
+            throw new GradleException('Obsolete foundation-api publication coordinate was generated')
+        }
+        File modDir = new File(staging,
+                'io/github/yu1sh/reality/reality-foundation/0.1.0-SNAPSHOT')
+        def snapshotFiles = { File directory, String artifactId ->
+            File metadataFile = new File(directory, 'maven-metadata.xml')
+            if (!metadataFile.isFile()) {
+                throw new GradleException("Missing Maven snapshot metadata for ${artifactId}")
+            }
+            def metadata = new XmlSlurper(false, false).parse(metadataFile)
+            if (metadata.artifactId.text() != artifactId
+                    || metadata.version.text() != '0.1.0-SNAPSHOT') {
+                throw new GradleException("Invalid snapshot metadata for ${artifactId}")
+            }
+            def values = metadata.versioning.snapshotVersions.snapshotVersion.collect { entry ->
+                [classifier: entry.classifier.text(), extension: entry.extension.text(), value: entry.value.text()]
+            }
+            def valuePattern = ~/0\.1\.0-\d{8}\.\d{6}-\d+/
+            if (values.isEmpty() || values.any { !(it.value ==~ valuePattern) }
+                    || values.collect { it.value }.toSet().size() != 1) {
+                throw new GradleException("Snapshot metadata for ${artifactId} is not a pinned timestamped snapshot")
+            }
+            def value = values.first().value
+            def result = [:]
+            values.each { entry ->
+                String suffix = entry.classifier ? "-${entry.classifier}" : ''
+                File artifact = new File(directory, "${artifactId}-${value}${suffix}.${entry.extension}")
+                if (!artifact.isFile() || artifact.length() == 0L) {
+                    throw new GradleException("Missing staged publication artifact: ${artifact.name}")
+                }
+                result["${entry.classifier ?: 'main'}.${entry.extension}"] = artifact
+            }
+            result
+        }
+        def apiFiles = snapshotFiles(apiDir, 'reality-foundation-api')
+        def modFiles = snapshotFiles(modDir, 'reality-foundation')
+        List<File> required = [
+                apiFiles['main.jar'], apiFiles['sources.jar'], apiFiles['javadoc.jar'], apiFiles['main.pom'],
+                modFiles['main.jar'], modFiles['sources.jar'], modFiles['main.pom']
+        ]
+        required.each { file ->
+            if (!file.isFile() || file.length() == 0L) {
+                throw new GradleException("Missing staged publication artifact: ${file.name}")
+            }
+        }
+        def apiPom = new XmlSlurper(false, false).parse(apiFiles['main.pom'])
+        if (apiPom.artifactId.text() != 'reality-foundation-api'
+                || apiPom.version.text() != '0.1.0-SNAPSHOT') {
+            throw new GradleException('API POM coordinate/version is not exact')
+        }
+        def apiDependencies = apiPom.dependencies.dependency.collect {
+            "${it.groupId.text().trim()}:${it.artifactId.text().trim()}".toString()
+        }
+        if (apiDependencies.any { it.contains('minecraft') || it.contains('forge') }) {
+            throw new GradleException('API POM must not depend on Minecraft or Forge')
+        }
+        if (!apiDependencies.contains('io.github.yu1sh.reality:reality-core')) {
+            throw new GradleException('API POM must carry the exact reality-core dependency')
+        }
+        if (apiPom.licenses.license.name.text() != 'Apache License, Version 2.0'
+                || apiPom.scm.url.text() != 'https://github.com/yu1sh/reality-foundation') {
+            throw new GradleException('API POM metadata is incomplete')
+        }
+        def modPom = new XmlSlurper(false, false).parse(modFiles['main.pom'])
+        if (modPom.artifactId.text() != 'reality-foundation'
+                || modPom.version.text() != '0.1.0-SNAPSHOT') {
+            throw new GradleException('Mod POM coordinate/version is not exact')
+        }
+        if (modPom.properties.'reality.foundation.api.artifactId'.text() != 'reality-foundation-api'
+                || modPom.properties.'reality.foundation.api.version'.text() != '0.1.0-SNAPSHOT'
+                || modPom.properties.'reality.foundation.core.version'.text() != '0.1.0-SNAPSHOT'
+                || modPom.properties.'reality.foundation.jarjar'.text() != 'reality-foundation-api/core singleton exact') {
+            throw new GradleException('Mod POM does not record the exact Jar-in-Jar contract')
+        }
+        new java.util.zip.ZipFile(modFiles['main.jar']).withCloseable { jar ->
+            def metadataEntry = jar.getEntry('META-INF/jarjar/metadata.json')
+            if (metadataEntry == null) {
+                throw new GradleException('Staged Mod has no Jar-in-Jar metadata')
+            }
+            def metadata = new groovy.json.JsonSlurper().parse(jar.getInputStream(metadataEntry))
+            def identifiers = metadata.jars.collect { it.identifier.artifact.toString().trim() }.sort()
+            if (identifiers.size() != 2
+                    || !identifiers.contains('reality-foundation-api')
+                    || !identifiers.contains('reality-core')) {
+                throw new GradleException("Unexpected staged Jar-in-Jar set: ${identifiers}")
+            }
+        }
+    }
+}

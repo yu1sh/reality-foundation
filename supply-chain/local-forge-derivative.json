@@ -1,0 +1,11 @@
+{
+  "algorithm": "reality-foundation-forge-local-derivative-canonical-v1",
+  "component": "net.minecraftforge:forge:1.20.1-47.4.10_mapped_official_1.20.1",
+  "file": "forge-1.20.1-47.4.10_mapped_official_1.20.1.jar",
+  "canonical_sha256": "ad4acce93994b4dddb92bd17bf3c5d6f4bbaa15aca711262778c272dc395970c",
+  "volatile_exclusions": [
+    "ZIP entry order",
+    "ZIP DOS date/time",
+    "ZIP 0x5455 extended timestamp extra field"
+  ]
+}

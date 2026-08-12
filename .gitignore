@@ -1,0 +1,9 @@
+.gradle/
+build/
+*/build/
+run/
+forge-1.20.1/run/
+*.iml
+.idea/
+eclipse/
+*.log

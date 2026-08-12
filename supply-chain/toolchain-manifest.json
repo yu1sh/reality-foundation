@@ -1,0 +1,26 @@
+{
+  "java": {
+    "vendor": "Eclipse Temurin",
+    "version": "17.0.20+8",
+    "os": "linux",
+    "architecture": "x64",
+    "archive_sha256": "be7668bc030d578b83d6d5ef9221d6d6729bbbca8cf94a7d52e16ac68b5a5a35",
+    "class_major": 61,
+    "archive_evidence": "The SHA-256 identifies the verified Temurin Linux x64 archive; setup-java cache contents are not represented as independently verified by this field."
+  },
+  "gradle": {
+    "version": "8.8",
+    "distribution_sha256": "a4b4158601f8636cdeeab09bd76afb640030bb5b144aafe261a5e8af027dc612"
+  },
+  "forge": {
+    "minecraft": "1.20.1",
+    "forge": "47.4.10",
+    "forge_gradle": "6.0.54",
+    "mdk_sha256": "73e0122becd05e39b47eced54e030380d66411850ed86786a2d58ecd886b0451",
+    "mappings": "official-1.20.1"
+  },
+  "reality_core": {
+    "module": "io.github.yu1sh.reality:reality-core",
+    "source_ref": "aa9956e03a8d163d1d0a2bbdcf38cc328fc37397"
+  }
+}

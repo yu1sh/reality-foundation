@@ -1,0 +1,73 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = 'reality-foundation-api'
+}
+
+dependencies {
+    // The exact reviewed core checkout is substituted in settings.gradle.
+    api 'io.github.yu1sh.reality:reality-core:0.1.0-SNAPSHOT'
+}
+
+java {
+    withSourcesJar()
+    withJavadocJar()
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            artifactId = 'reality-foundation-api'
+            pom {
+                name = 'Reality Foundation API'
+                description = 'Minecraft-independent Reality Foundation server context and diagnostics API'
+                url = 'https://github.com/yu1sh/reality-foundation'
+                licenses {
+                    license {
+                        name = 'Apache License, Version 2.0'
+                        url = 'https://www.apache.org/licenses/LICENSE-2.0'
+                        distribution = 'repo'
+                    }
+                }
+                developers {
+                    developer {
+                        id = 'reality-contributors'
+                        name = 'Reality contributors'
+                    }
+                }
+                scm {
+                    connection = 'scm:git:https://github.com/yu1sh/reality-foundation.git'
+                    developerConnection = 'scm:git:ssh://git@github.com/yu1sh/reality-foundation.git'
+                    url = 'https://github.com/yu1sh/reality-foundation'
+                }
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = 'staging'
+            url = rootProject.layout.buildDirectory.dir('staging-repository')
+        }
+    }
+}
+
+tasks.register('apiMinecraftBoundaryCheck') {
+    group = 'verification'
+    description = 'Ensures reality-foundation-api source has no Minecraft or Forge imports.'
+    doLast {
+        fileTree('src').matching { include '**/*.java' }.each { source ->
+            def text = source.getText('UTF-8')
+            if (text.contains('net.minecraft') || text.contains('net.minecraftforge')) {
+                throw new GradleException("Minecraft type leaked into reality-foundation-api: ${source}")
+            }
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('apiMinecraftBoundaryCheck')
+}

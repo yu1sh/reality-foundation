@@ -1,0 +1,184 @@
+name: Reality Foundation CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: reality-foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-gate:
+    name: Fixed release train gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+
+      - name: Check out exact reviewed reality-core
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          repository: yu1sh/reality-core
+          ref: aa9956e03a8d163d1d0a2bbdcf38cc328fc37397
+          path: _deps/reality-core
+          fetch-depth: 1
+
+      - name: Verify reviewed core ref
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C _deps/reality-core rev-parse HEAD)" = "aa9956e03a8d163d1d0a2bbdcf38cc328fc37397"
+
+      - name: Set up exact Temurin 17.0.20+8
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
+        with:
+          distribution: temurin
+          java-version: '17.0.20+8'
+          architecture: x64
+
+      - name: Verify exact Java runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          java_line="$(java -version 2>&1 | head -n 1)"
+          java_version="$(printf '%s\n' "${java_line}" | sed -E 's/.*version "([^"]+)".*/\1/')"
+          test "${java_version}" = "17.0.20"
+          runtime_version="$(java -XshowSettings:properties -version 2>&1 | awk -F= '/java.runtime.version =/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')"
+          test "${runtime_version}" = "17.0.20+8"
+          java_vendor="$(java -XshowSettings:properties -version 2>&1 | awk -F= '/java.vendor =/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')"
+          test "${java_vendor}" = "EclipseAdoptium"
+
+      # setup-java cache verification is not substituted for this archive
+      # acquisition evidence check.
+      - name: Verify Temurin archive evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive_url="https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.20%2B8/OpenJDK17U-jdk_x64_linux_hotspot_17.0.20_8.tar.gz"
+          curl --fail --location --retry 3 --output temurin-17.0.20+8.tar.gz "${archive_url}"
+          printf '%s  %s\n' 'be7668bc030d578b83d6d5ef9221d6d6729bbbca8cf94a7d52e16ac68b5a5a35' 'temurin-17.0.20+8.tar.gz' | sha256sum --check
+          rm -f temurin-17.0.20+8.tar.gz
+
+      - name: Set up exact Gradle 8.8
+        uses: gradle/actions/setup-gradle@748248ddd2a24f49513d8f472f81c3a07d4d50e1
+        with:
+          gradle-version: '8.8'
+
+      - name: Verify policy and negative selectors
+        run: |
+          python3 scripts/verify_source_policy.py --repo-root . --self-test
+          python3 scripts/verify_toolchain.py --repo-root . --self-test
+          python3 scripts/verify_translations.py --repo-root .
+          python3 scripts/verify_dependency_verification.py --self-test
+          python3 scripts/verify_dependency_verification.py
+          python3 scripts/verify_local_forge_derivative.py --self-test
+          python3 scripts/verify_gametest_log.py --self-test
+          python3 scripts/run_server_smoke.py --self-test
+
+      # This home begins empty.  The online strict pass is the only step
+      # allowed to populate it; every later Gradle invocation is offline.
+      - name: Create isolated Gradle verification home
+        shell: bash
+        run: |
+          set -euo pipefail
+          verification_home="$(mktemp -d "${RUNNER_TEMP}/reality-foundation-gradle-home.XXXXXX")"
+          test -z "$(find "${verification_home}" -mindepth 1 -print -quit)"
+          printf 'FOUNDATION_VERIFICATION_GRADLE_HOME=%s\n' "${verification_home}" >> "${GITHUB_ENV}"
+
+      - name: Online strict clean check, API Javadoc, and Forge assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GRADLE_USER_HOME="${FOUNDATION_VERIFICATION_GRADLE_HOME}"
+          gradle --dependency-verification=strict --no-daemon -PrealityCoreDir=_deps/reality-core clean check :reality-foundation-api:javadoc :forge-1.20.1:downloadAssets
+
+      - name: Compare local Forge derivative from two empty Gradle homes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_local_forge_derivative_caches.py \
+            --repo-root . --core-dir _deps/reality-core --java-home "${JAVA_HOME}" \
+            --cache-base "${RUNNER_TEMP}"
+
+      - name: Offline strict clean check and API Javadoc
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GRADLE_USER_HOME="${FOUNDATION_VERIFICATION_GRADLE_HOME}"
+          gradle --dependency-verification=strict --offline --no-daemon -PrealityCoreDir=_deps/reality-core clean check :reality-foundation-api:javadoc
+
+      - name: Verify local publication staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GRADLE_USER_HOME="${FOUNDATION_VERIFICATION_GRADLE_HOME}"
+          gradle --dependency-verification=strict --offline --no-daemon -PrealityCoreDir=_deps/reality-core verifyReleaseStaging
+
+      - name: Create isolated GameTest evidence directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id="gametest-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          run_dir="$(mktemp -d "${RUNNER_TEMP}/reality-foundation-${run_id}.XXXXXX")"
+          started_at_ns="$(date +%s%N)"
+          printf 'FOUNDATION_GAMETEST_RUN_ID=%s\n' "${run_id}" >> "${GITHUB_ENV}"
+          printf 'FOUNDATION_GAMETEST_RUN_DIR=%s\n' "${run_dir}" >> "${GITHUB_ENV}"
+          printf 'FOUNDATION_GAMETEST_STARTED_AT_NS=%s\n' "${started_at_ns}" >> "${GITHUB_ENV}"
+
+      - name: Run Forge GameTestServer
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GRADLE_USER_HOME="${FOUNDATION_VERIFICATION_GRADLE_HOME}"
+          gradle --dependency-verification=strict --offline --no-daemon -PrealityCoreDir=_deps/reality-core \
+            -PfoundationRunDir="${FOUNDATION_GAMETEST_RUN_DIR}" \
+            -PfoundationEvidenceRunId="${FOUNDATION_GAMETEST_RUN_ID}" \
+            :forge-1.20.1:runGameTestServer
+
+      - name: Verify GameTest evidence
+        run: |
+          python3 scripts/verify_gametest_log.py \
+            --log-file "${FOUNDATION_GAMETEST_RUN_DIR}/logs/latest.log" \
+            --run-id "${FOUNDATION_GAMETEST_RUN_ID}" \
+            --started-at-ns "${FOUNDATION_GAMETEST_STARTED_AT_NS}"
+
+      - name: Run dedicated-server smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GRADLE_USER_HOME="${FOUNDATION_VERIFICATION_GRADLE_HOME}"
+          python3 scripts/run_server_smoke.py --repo-root . --gradle-command ./gradlew --core-dir _deps/reality-core --java-home "${JAVA_HOME}"
+
+      - name: Verify artifacts and dependency boundaries
+        run: |
+          python3 scripts/verify_artifacts.py forge-1.20.1/build/libs/reality_foundation-0.1.0-SNAPSHOT-all.jar
+          python3 scripts/verify_runtime_sbom.py forge-1.20.1/build/reports/sbom/reality-foundation-runtime-sbom.json \
+            --mod-jar forge-1.20.1/build/libs/reality_foundation-0.1.0-SNAPSHOT-all.jar \
+            --api-jar foundation-api/build/libs/reality-foundation-api-0.1.0-SNAPSHOT.jar \
+            --core-jar _deps/reality-core/build/libs/reality-core-0.1.0-SNAPSHOT.jar
+          jdeps --multi-release 17 --ignore-missing-deps --recursive forge-1.20.1/build/libs/reality_foundation-0.1.0-SNAPSHOT-all.jar
+
+      - name: Verify reproducible mod and SBOM hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GRADLE_USER_HOME="${FOUNDATION_VERIFICATION_GRADLE_HOME}"
+          gradle --dependency-verification=strict --offline --no-daemon -PrealityCoreDir=_deps/reality-core clean :forge-1.20.1:reobfJarJar
+          first_jar_sha="$(sha256sum forge-1.20.1/build/libs/reality_foundation-0.1.0-SNAPSHOT-all.jar | awk '{print $1}')"
+          gradle --dependency-verification=strict --offline --no-daemon -PrealityCoreDir=_deps/reality-core clean :forge-1.20.1:reobfJarJar
+          second_jar_sha="$(sha256sum forge-1.20.1/build/libs/reality_foundation-0.1.0-SNAPSHOT-all.jar | awk '{print $1}')"
+          test "${first_jar_sha}" = "${second_jar_sha}"
+          gradle --dependency-verification=strict --offline --no-daemon -PrealityCoreDir=_deps/reality-core clean :forge-1.20.1:runtimeSbom
+          python3 scripts/verify_runtime_sbom.py forge-1.20.1/build/reports/sbom/reality-foundation-runtime-sbom.json \
+            --mod-jar forge-1.20.1/build/libs/reality_foundation-0.1.0-SNAPSHOT-all.jar \
+            --api-jar foundation-api/build/libs/reality-foundation-api-0.1.0-SNAPSHOT.jar \
+            --core-jar _deps/reality-core/build/libs/reality-core-0.1.0-SNAPSHOT.jar
+          first_sbom_sha="$(sha256sum forge-1.20.1/build/reports/sbom/reality-foundation-runtime-sbom.json | awk '{print $1}')"
+          gradle --dependency-verification=strict --offline --no-daemon -PrealityCoreDir=_deps/reality-core clean :forge-1.20.1:runtimeSbom
+          second_sbom_sha="$(sha256sum forge-1.20.1/build/reports/sbom/reality-foundation-runtime-sbom.json | awk '{print $1}')"
+          test "${first_sbom_sha}" = "${second_sbom_sha}"

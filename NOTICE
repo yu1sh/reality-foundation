@@ -1,0 +1,13 @@
+Reality Foundation
+Copyright 2026 Reality contributors
+
+This project is licensed under the Apache License, Version 2.0; see LICENSE.
+The bundled reality-foundation-api and reviewed reality-core source are Apache-2.0.
+
+Forge 47.4.10 is a provided runtime dependency under its LGPL 2.1 terms and
+has its own attribution and license text. Minecraft is a provided runtime
+under Mojang's EULA and Usage Guidelines; this repository does not redistribute
+Minecraft binaries. The complete Forge/Minecraft runtime closure and its
+third-party notices remain the responsibility of the formal distribution SBOM
+and distribution process. See COMPATIBILITY.md and the generated runtime SBOM
+for the exact resolved hashes and ownership boundary.
