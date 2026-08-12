@@ -24,7 +24,7 @@ jobs:
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           repository: yu1sh/reality-core
-          ref: fd93d533ba3e9aa63e182a4d0ba9da0e82b24728
+          ref: bb858141e0cd628fce067093e8959255317ba16c
           path: _deps/reality-core
           fetch-depth: 1
 
@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C _deps/reality-core rev-parse HEAD)" = "fd93d533ba3e9aa63e182a4d0ba9da0e82b24728"
+          test "$(git -C _deps/reality-core rev-parse HEAD)" = "bb858141e0cd628fce067093e8959255317ba16c"
 
       - name: Set up exact Temurin 17.0.20+8
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9

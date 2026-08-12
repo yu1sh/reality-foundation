@@ -32,7 +32,7 @@ def validate_workflow(text: str) -> None:
         raise ValueError("workflow must checkout the reviewed reality-core repository")
     if "path: _deps/reality-core" not in text:
         raise ValueError("workflow core checkout must be isolated under _deps/reality-core")
-    expected_ref = "fd93d533ba3e9aa63e182a4d0ba9da0e82b24728"
+    expected_ref = "bb858141e0cd628fce067093e8959255317ba16c"
     if f"ref: {expected_ref}" not in text:
         raise ValueError("workflow core checkout ref is not exact")
     if text.count("-PrealityCoreDir=_deps/reality-core") < 1:
@@ -73,12 +73,12 @@ def self_test() -> None:
         "distribution: temurin\narchitecture: x64\n"
         "java.runtime.version\njava.vendor\n"
         "repository: yu1sh/reality-core\npath: _deps/reality-core\n"
-        "ref: fd93d533ba3e9aa63e182a4d0ba9da0e82b24728\n"
+        "ref: bb858141e0cd628fce067093e8959255317ba16c\n"
         "gradle -PrealityCoreDir=_deps/reality-core\n")
     validate_workflow(valid)
     for missing in (
             "repository: yu1sh/reality-core", "path: _deps/reality-core",
-            "ref: fd93d533ba3e9aa63e182a4d0ba9da0e82b24728",
+            "ref: bb858141e0cd628fce067093e8959255317ba16c",
             "-PrealityCoreDir=_deps/reality-core"):
         candidate = valid.replace(missing, "")
         try:

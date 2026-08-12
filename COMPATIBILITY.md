@@ -15,7 +15,7 @@
 | Forge MDK SHA-256 | `73e0122becd05e39b47eced54e030380d66411850ed86786a2d58ecd886b0451` | manifest |
 | reality-core source provenance | `5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22` | approved migration source provenance; not the CI checkout ref |
 | reality-core canonical remote | `https://github.com/yu1sh/reality-core.git` | public canonical child repository |
-| reality-core remote child commit | `fd93d533ba3e9aa63e182a4d0ba9da0e82b24728` | `main` commit used by CI and the canonical workspace child |
+| reality-core remote child commit | `bb858141e0cd628fce067093e8959255317ba16c` | `main` commit used by CI and the canonical workspace child |
 
 The workflow verifies `java -version` at 17.0.20 and
 `java.runtime.version` at 17.0.20+8. It rejects `17`, `17.x`, `latest`, and

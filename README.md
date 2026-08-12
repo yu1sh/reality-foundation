@@ -15,8 +15,8 @@ feature.
 - Gradle 8.8, with the distribution SHA recorded in `supply-chain/`
 - Eclipse Temurin JDK 17.0.20+8, Linux x64, class major 61
 - `reality-core` migration source provenance `5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22` (evidence only)
-- canonical public remote `https://github.com/yu1sh/reality-core.git`, `main@fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`
-- canonical workspace child `libs/reality-core@fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`
+- canonical public remote `https://github.com/yu1sh/reality-core.git`, `main@bb858141e0cd628fce067093e8959255317ba16c`
+- canonical workspace child `libs/reality-core@bb858141e0cd628fce067093e8959255317ba16c`
 - network protocol `1`, API schema `foundation.api.v1`, release train `rt1-foundation`
 
 ## `reality-core` dependency contract
@@ -28,7 +28,7 @@ approved by the migration authority: `5e04ebc27c12d5b26b2a495e685d6ddf0bb21e22`.
 That value is migration evidence only and is not the CI checkout ref.
 `reality_core_child_baseline` identifies the canonical child repository and its
 public remote, `https://github.com/yu1sh/reality-core.git`, at
-`libs/reality-core` `main@fd93d533ba3e9aa63e182a4d0ba9da0e82b24728`. CI checks out
+`libs/reality-core` `main@bb858141e0cd628fce067093e8959255317ba16c`. CI checks out
 and asserts that remote child commit. A source provenance is not a child
 repository commit and these values must not be interchanged.
 
