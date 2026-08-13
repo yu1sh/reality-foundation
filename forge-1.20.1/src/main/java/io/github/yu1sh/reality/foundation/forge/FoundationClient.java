@@ -103,6 +103,7 @@ public final class FoundationClient {
                 && Minecraft.getInstance().player.containerMenu instanceof DiagnosticsMenu menu) {
             try {
                 menu.applySnapshot(packet.snapshot());
+                menu.setErrorMessageKey(null);
             } catch (RuntimeException failure) {
                 menu.setErrorMessageKey("foundation.error.malformed_request");
             }
@@ -114,6 +115,7 @@ public final class FoundationClient {
                 && Minecraft.getInstance().player.containerMenu instanceof DiagnosticsMenu menu) {
             try {
                 menu.applyDelta(packet.delta());
+                menu.setErrorMessageKey(null);
             } catch (RuntimeException failure) {
                 menu.setErrorMessageKey("foundation.error.revision_conflict");
             }
@@ -121,9 +123,18 @@ public final class FoundationClient {
     }
 
     static void receiveError(DiagnosticsErrorPacket packet) {
-        if (Minecraft.getInstance().player != null
-                && Minecraft.getInstance().player.containerMenu instanceof DiagnosticsMenu menu) {
-            menu.setErrorMessageKey(packet.error().messageKey());
+        Minecraft minecraft = Minecraft.getInstance();
+        LocalPlayer player = minecraft.player;
+        if (player == null) {
+            return;
+        }
+        String messageKey = packet.error().messageKey();
+        if (minecraft.screen instanceof DiagnosticsScreen
+                && player.containerMenu instanceof DiagnosticsMenu menu) {
+            menu.setErrorMessageKey(messageKey);
+        } else {
+            player.displayClientMessage(Component.translatable(
+                    "foundation.gui.error", Component.translatable(messageKey)), false);
         }
     }
 

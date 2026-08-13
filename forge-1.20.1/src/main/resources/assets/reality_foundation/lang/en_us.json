@@ -46,6 +46,7 @@
   "foundation.command.health.line": "%s: %s — %s",
   "foundation.command.admin.line": "Admin %s: %s",
   "foundation.command.recovery.cleared": "Diagnostics sessions cleared (audit: %s)",
+  "foundation.gui.error": "Error: %s",
   "foundation.error.malformed_request": "The diagnostics request was malformed.",
   "foundation.error.handshake_required": "The foundation handshake is required.",
   "foundation.error.permission_denied": "You do not have permission for this operation.",

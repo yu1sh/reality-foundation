@@ -27,6 +27,7 @@ public final class DiagnosticsScreen extends AbstractContainerScreen<Diagnostics
     private static final int HEALTH_PAGE_SIZE = 7;
     private static final int DETAIL_LINES_PER_PAGE = 10;
     private static final int MAX_DETAIL_ROWS = 11;
+    private static final int ERROR_MAX_WIDTH = 288;
     private static final Map<String, String> LABEL_KEYS = Map.ofEntries(
             Map.entry("foundation.connection", "foundation.gui.label.connection"),
             Map.entry("foundation.protocol", "foundation.gui.label.protocol"),
@@ -285,8 +286,15 @@ public final class DiagnosticsScreen extends AbstractContainerScreen<Diagnostics
                 renderValues(graphics, adminTab ? snapshot.adminValues() : snapshot.publicValues());
             }
         });
-        menu.errorMessageKey().ifPresent(key -> graphics.drawString(
-                font, Component.translatable(key), 16, 138, 0xFF6B6B));
+        menu.errorMessageKey().ifPresent(key -> renderError(graphics, key));
+    }
+
+    private void renderError(GuiGraphics graphics, String messageKey) {
+        Component message = Component.translatable(
+                "foundation.gui.error", Component.translatable(messageKey));
+        String visible = DiagnosticsScreenLayout.ellipsize(
+                message.getString(), ERROR_MAX_WIDTH, font::width);
+        graphics.drawString(font, Component.literal(visible), 16, 138, 0xFF6B6B);
     }
 
     private void renderValues(GuiGraphics graphics, Map<String, String> values) {
