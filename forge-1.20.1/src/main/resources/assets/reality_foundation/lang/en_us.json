@@ -43,6 +43,7 @@
   "foundation.state.handshake_accepted": "Connection accepted",
   "foundation.state.rejected": "Connection rejected",
   "foundation.command.status.line": "%s: %s",
+  "foundation.command.health.line": "%s: %s — %s",
   "foundation.command.admin.line": "Admin %s: %s",
   "foundation.command.recovery.cleared": "Diagnostics sessions cleared (audit: %s)",
   "foundation.error.malformed_request": "The diagnostics request was malformed.",

@@ -43,6 +43,7 @@
   "foundation.state.handshake_accepted": "接続を承認済み",
   "foundation.state.rejected": "接続拒否",
   "foundation.command.status.line": "%s: %s",
+  "foundation.command.health.line": "%s: %s — %s",
   "foundation.command.admin.line": "管理 %s: %s",
   "foundation.command.recovery.cleared": "診断セッションを消去しました（監査: %s）",
   "foundation.error.malformed_request": "診断リクエストの形式が不正です。",

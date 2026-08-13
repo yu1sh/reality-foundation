@@ -25,6 +25,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
+import java.util.Locale;
 import java.util.UUID;
 
 /** Forge lifecycle, command, and player cleanup adapter. */
@@ -92,6 +93,10 @@ public final class FoundationForgeEvents {
         result.snapshot().publicValues().forEach((key, value) ->
                 source.sendSuccess(() -> Component.translatable(
                         "foundation.command.status.line", key, value), false));
+        result.snapshot().serviceHealth().forEach(health ->
+                source.sendSuccess(() -> Component.translatable(
+                        "foundation.command.health.line", health.serviceId(),
+                        health.status().name().toLowerCase(Locale.ROOT), health.messageKey()), false));
         if (actor.actor().permissionLevel() >= 2 && !actor.actor().streamerMode()) {
             result.snapshot().adminValues().forEach((key, value) ->
                     source.sendSuccess(() -> Component.translatable(
