@@ -3,6 +3,7 @@ package io.github.yu1sh.reality.foundation.forge;
 import io.github.yu1sh.reality.foundation.api.ClientHelloPacket;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsDeltaPacket;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsErrorPacket;
+import io.github.yu1sh.reality.foundation.api.DiagnosticsRecoveryResultPacket;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsSnapshotPacket;
 import io.github.yu1sh.reality.foundation.api.FoundationHandshake;
 import io.github.yu1sh.reality.foundation.api.FoundationPacket;
@@ -95,6 +96,8 @@ public final class FoundationClient {
             receiveDelta(delta);
         } else if (packet instanceof DiagnosticsErrorPacket error) {
             receiveError(error);
+        } else if (packet instanceof DiagnosticsRecoveryResultPacket recovery) {
+            receiveRecoveryResult(recovery);
         }
     }
 
@@ -135,6 +138,14 @@ public final class FoundationClient {
         } else {
             player.displayClientMessage(Component.translatable(
                     "foundation.gui.error", Component.translatable(messageKey)), false);
+        }
+    }
+
+    static void receiveRecoveryResult(DiagnosticsRecoveryResultPacket packet) {
+        Minecraft minecraft = Minecraft.getInstance();
+        LocalPlayer player = minecraft.player;
+        if (player != null && player.containerMenu instanceof DiagnosticsMenu menu) {
+            menu.applyRecoveryResult(packet.requestId(), packet.result());
         }
     }
 

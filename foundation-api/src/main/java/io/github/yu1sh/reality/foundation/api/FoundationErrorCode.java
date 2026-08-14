@@ -1,6 +1,6 @@
 package io.github.yu1sh.reality.foundation.api;
 
-/** Stable application errors for the read-only diagnostics boundary. */
+/** Stable application errors for the diagnostics application boundary. */
 public enum FoundationErrorCode {
     MALFORMED_REQUEST("malformed_request", "foundation.error.malformed_request"),
     HANDSHAKE_REQUIRED("handshake_required", "foundation.error.handshake_required"),

@@ -37,6 +37,10 @@ refresh. Streamer mode suppresses admin values even for an otherwise eligible
 actor. On permission downgrade or streamer-mode enablement, every previously
 visible admin key appears in `removedAdminKeys`; client application clears the
 admin map. A permission upgrade adds values only after a new server snapshot.
+The `recovery_command=available` admin key is projected only for a
+server-authenticated permission-level-4 actor with streamer redaction disabled;
+its presence is the only client-side eligibility signal for the recovery
+control. The client never infers permission from its own player state.
 
 ## Controls and errors
 
@@ -58,10 +62,17 @@ client map is changed.
 ## Recovery mutation envelope
 
 `FoundationMutationEnvelope` defines request ID, operation ID, session ID, and
-expected version for the server-side recovery mutation. The current client
-screen remains read-only and registers no fabricated mutation packet; the
-permission-level-4 command and any future GUI action use the same Foundation
-application service. That service requires a server-issued active session and
-exact revision, uses only server-authenticated actor/permission projection,
-fails closed unless its audit result is `RECORDED`, and replays a matching
-operation ID without another mutation.
+expected version for the server-side recovery mutation. The admin GUI shows
+the operation name, reason, and irreversible effect. Its first button click
+only arms confirmation; the second sends `ClearDiagnosticsSessionsPacket`.
+The client request carries only the envelope fields, which are untrusted
+correlation/version inputs. The active server reconstructs the actor and
+handshake context and the shared application service revalidates server
+identity, active session, exact revision, permission level 4, request and
+operation identity, replay/idempotency, and clock before commit. The command
+and GUI therefore have command-GUI parity at the mutation service boundary.
+The service fails closed unless its audit result is `RECORDED`; no session is
+cleared for `NOT_CONFIGURED`, `REJECTED`, null, or throwing audit results.
+`DiagnosticsRecoveryResultPacket` reports success, denial, conflict, expiry,
+rate-limit, or internal failure back to the GUI, and a matching operation ID
+replays the recorded result without another mutation.

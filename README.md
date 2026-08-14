@@ -64,6 +64,11 @@ Temurin installation; no local machine path is part of this repository.
 6. Refresh validates actor, session, expiry, rate limit, protocol, and exact
    revision. Only a forward delta is accepted; replayed or out-of-order
    deltas are rejected without changing client state.
+7. When the server projection includes `recovery_command=available` (current
+   authenticated permission level 4 and no streamer redaction), the admin tab
+   presents the named recovery operation. The first click only arms a
+   confirmation; the second sends the request and the server result is shown
+   in the GUI.
 
 The screen supports `en-US` and `ja-JP`, keyboard-focusable buttons, status
 text in addition to color, and a compact layout that tolerates larger text.
@@ -75,15 +80,16 @@ field is included in a public projection. Streamer mode hides admin details.
 - `/realityfoundation status` uses the same `FoundationDiagnosticsQuery` as
   the GUI and displays only the caller's server-authorized projection.
 - `/realityfoundation recovery clear-sessions` is a permission-level-4
-  recovery operation. Its shared application path accepts a complete
+  recovery operation. The command adapter and the GUI recovery packet both
+  use the same application service and complete
   `FoundationMutationEnvelope` (`requestId`, `operationId`, `sessionId`, and
-  exact `expectedVersion`) plus the server-authenticated actor; it never uses
-  a client permission field. The active server-issued session, actor,
-  lifecycle, revision, permission projection, and clock are rechecked before
-  commit. Same operation ID plus the same fingerprint replays the recorded
-  result without clearing a newer session; a different fingerprint returns
-  `OPERATION_CONFLICT`. The bounded in-memory replay ledger is deliberately
-  not durable across a server restart.
+  exact `expectedVersion`) shape. The GUI packet contains no actor or
+  permission authority; the active server binds the authenticated actor and
+  rechecks the active session, lifecycle, revision, permission projection,
+  and clock before commit. Same operation ID plus the same fingerprint replays
+  the recorded result without clearing a newer session; a different
+  fingerprint returns `OPERATION_CONFLICT`. The bounded in-memory replay
+  ledger is deliberately not durable across a server restart.
 
 `RECORDED` is the only disposition that means the audit event was recorded.
 The current `NoopAuditPort` returns `NOT_CONFIGURED` and is development-only:

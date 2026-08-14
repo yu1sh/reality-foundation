@@ -1,6 +1,7 @@
 package io.github.yu1sh.reality.foundation.forge;
 
 import io.github.yu1sh.reality.foundation.api.ClientHelloPacket;
+import io.github.yu1sh.reality.foundation.api.ClearDiagnosticsSessionsPacket;
 import io.github.yu1sh.reality.foundation.api.FoundationPacket;
 import io.github.yu1sh.reality.foundation.api.FoundationPacketCodec;
 import io.github.yu1sh.reality.foundation.api.FoundationVersion;
@@ -136,6 +137,8 @@ public final class FoundationNetwork {
                     state.handleOpen(sender, open);
                 } else if (decoded instanceof RefreshDiagnosticsPacket refresh) {
                     state.handleRefresh(sender, refresh);
+                } else if (decoded instanceof ClearDiagnosticsSessionsPacket recovery) {
+                    state.handleRecovery(sender, recovery);
                 } else {
                     rejectMalformed(context);
                 }

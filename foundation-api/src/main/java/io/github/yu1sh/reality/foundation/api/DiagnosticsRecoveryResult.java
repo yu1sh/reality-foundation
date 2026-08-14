@@ -3,7 +3,7 @@ package io.github.yu1sh.reality.foundation.api;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Stable success/denial/failure result for the management recovery command. */
+/** Stable success/denial/failure result for the management recovery boundary. */
 public final class DiagnosticsRecoveryResult {
     private final boolean accepted;
     private final FoundationError error;
@@ -36,5 +36,18 @@ public final class DiagnosticsRecoveryResult {
 
     public AuditDisposition auditDisposition() {
         return auditDisposition;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof DiagnosticsRecoveryResult that
+                && accepted == that.accepted
+                && Objects.equals(error, that.error)
+                && auditDisposition == that.auditDisposition;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(accepted, error, auditDisposition);
     }
 }

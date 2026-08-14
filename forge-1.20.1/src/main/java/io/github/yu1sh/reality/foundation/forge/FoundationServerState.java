@@ -1,6 +1,7 @@
 package io.github.yu1sh.reality.foundation.forge;
 
 import io.github.yu1sh.reality.foundation.api.ClientHelloPacket;
+import io.github.yu1sh.reality.foundation.api.ClearDiagnosticsSessionsPacket;
 import io.github.yu1sh.reality.foundation.api.ConnectionState;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsApplicationService;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsErrorPacket;
@@ -8,6 +9,8 @@ import io.github.yu1sh.reality.foundation.api.DiagnosticsOpenRequest;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsOpenResult;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsRefreshRequest;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsRefreshResult;
+import io.github.yu1sh.reality.foundation.api.DiagnosticsRecoveryResult;
+import io.github.yu1sh.reality.foundation.api.DiagnosticsRecoveryResultPacket;
 import io.github.yu1sh.reality.foundation.api.FoundationError;
 import io.github.yu1sh.reality.foundation.api.FoundationErrorCode;
 import io.github.yu1sh.reality.foundation.api.FoundationHandshake;
@@ -118,6 +121,20 @@ public final class FoundationServerState implements AutoCloseable {
             sendError(player, packet.requestId(), result.error().orElse(
                     FoundationError.of(FoundationErrorCode.INTERNAL_FAILURE)));
         }
+    }
+
+    /**
+     * Rebuilds all authority inputs from the active server and sender. The
+     * packet envelope is only an untrusted correlation/version proposal; the
+     * application service performs the session, permission, replay, and audit
+     * checks shared with the command adapter.
+     */
+    public void handleRecovery(ServerPlayer player, ClearDiagnosticsSessionsPacket packet) {
+        HandshakeDecision decision = decisionFor(player);
+        DiagnosticsRecoveryResult result = context.diagnostics().clearSessions(
+                packet.envelope(), actorFor(player), decision, connectionState(decision));
+        FoundationNetwork.sendToPlayer(new DiagnosticsRecoveryResultPacket(
+                packet.envelope().requestId(), result), player);
     }
 
     public void removePlayer(ServerPlayer player) {

@@ -1,6 +1,7 @@
 package io.github.yu1sh.reality.foundation.api;
 
 import io.github.yu1sh.reality.gui.LocaleTag;
+import io.github.yu1sh.reality.identity.OperationId;
 import io.github.yu1sh.reality.identity.RequestId;
 import io.github.yu1sh.reality.identity.SessionId;
 import io.github.yu1sh.reality.version.Revision;
@@ -51,6 +52,12 @@ public final class FoundationPacketCodec {
                 writeString(output, refresh.requestId().value());
                 writeString(output, refresh.sessionId().value());
                 writeRevision(output, refresh.expectedRevision());
+            } else if (packet instanceof ClearDiagnosticsSessionsPacket recovery) {
+                FoundationMutationEnvelope envelope = recovery.envelope();
+                writeString(output, envelope.requestId().value());
+                writeString(output, envelope.operationId().value());
+                writeString(output, envelope.sessionId().value());
+                writeRevision(output, envelope.expectedVersion());
             } else if (packet instanceof HandshakeResultPacket result) {
                 output.writeBoolean(result.accepted());
                 writeString(output, result.reason());
@@ -61,6 +68,9 @@ public final class FoundationPacketCodec {
             } else if (packet instanceof DiagnosticsErrorPacket error) {
                 writeString(output, error.requestId().value());
                 writeError(output, error.error());
+            } else if (packet instanceof DiagnosticsRecoveryResultPacket result) {
+                writeString(output, result.requestId().value());
+                writeRecoveryResult(output, result.result());
             } else {
                 throw new PacketCodecException("unknown_discriminator");
             }
@@ -95,11 +105,18 @@ public final class FoundationPacketCodec {
                         RequestId.of(readString(input)),
                         SessionId.of(readString(input)),
                         readRevision(input));
+                case 8 -> new ClearDiagnosticsSessionsPacket(FoundationMutationEnvelope.of(
+                        RequestId.of(readString(input)),
+                        OperationId.of(readString(input)),
+                        SessionId.of(readString(input)),
+                        readRevision(input)));
                 case 4 -> new HandshakeResultPacket(input.readBoolean(), readString(input));
                 case 5 -> new DiagnosticsSnapshotPacket(readSnapshot(input));
                 case 6 -> new DiagnosticsDeltaPacket(readDelta(input));
                 case 7 -> new DiagnosticsErrorPacket(
                         RequestId.of(readString(input)), readError(input));
+                case 9 -> new DiagnosticsRecoveryResultPacket(
+                        RequestId.of(readString(input)), readRecoveryResult(input));
                 default -> throw new PacketCodecException("unknown_discriminator");
             };
             if (input.available() != 0) {
@@ -207,6 +224,29 @@ public final class FoundationPacketCodec {
             throw new PacketCodecException("unknown_error_code");
         }
         return FoundationError.of(code, readMap(input));
+    }
+
+    private static void writeRecoveryResult(
+            DataOutputStream output, DiagnosticsRecoveryResult result) throws IOException {
+        output.writeBoolean(result.accepted());
+        output.writeByte(result.auditDisposition().ordinal());
+        if (!result.accepted()) {
+            writeError(output, result.error().orElseThrow(
+                    () -> new PacketCodecException("malformed_recovery_result")));
+        }
+    }
+
+    private static DiagnosticsRecoveryResult readRecoveryResult(DataInputStream input)
+            throws IOException {
+        boolean accepted = input.readBoolean();
+        int auditOrdinal = input.readUnsignedByte();
+        if (auditOrdinal >= AuditDisposition.values().length) {
+            throw new PacketCodecException("unknown_audit_disposition");
+        }
+        AuditDisposition auditDisposition = AuditDisposition.values()[auditOrdinal];
+        return accepted
+                ? DiagnosticsRecoveryResult.accepted(auditDisposition)
+                : DiagnosticsRecoveryResult.denied(readError(input), auditDisposition);
     }
 
     private static void writeRevision(DataOutputStream output, Revision revision) throws IOException {

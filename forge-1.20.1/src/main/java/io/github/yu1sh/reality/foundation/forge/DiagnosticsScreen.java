@@ -1,8 +1,12 @@
 package io.github.yu1sh.reality.foundation.forge;
 
+import io.github.yu1sh.reality.foundation.api.ClearDiagnosticsSessionsPacket;
+import io.github.yu1sh.reality.foundation.api.DiagnosticsRecoveryResult;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsSnapshot;
+import io.github.yu1sh.reality.foundation.api.FoundationMutationEnvelope;
 import io.github.yu1sh.reality.foundation.api.RefreshDiagnosticsPacket;
 import io.github.yu1sh.reality.foundation.api.ServiceHealth;
+import io.github.yu1sh.reality.identity.OperationId;
 import io.github.yu1sh.reality.identity.RequestId;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -14,10 +18,11 @@ import net.minecraft.world.entity.player.Inventory;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
-/** Native, keyboard-focusable, read-only System Status screen. */
+/** Native, keyboard-focusable System Status and recovery screen. */
 public final class DiagnosticsScreen extends AbstractContainerScreen<DiagnosticsMenu> {
     static final int IMAGE_HEIGHT = 228;
     static final int CONTENT_TOP = 28;
@@ -65,6 +70,8 @@ public final class DiagnosticsScreen extends AbstractContainerScreen<Diagnostics
     private Button detailPreviousButton;
     private Button detailButton;
     private Button detailNextButton;
+    private Button recoveryButton;
+    private boolean recoveryConfirmationPending;
 
     public DiagnosticsScreen(DiagnosticsMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -115,6 +122,10 @@ public final class DiagnosticsScreen extends AbstractContainerScreen<Diagnostics
                         button -> enterDetail())
                 .createNarration(ignored -> detailNarration())
                 .bounds(leftPos + 104, topPos + 204, 88, 20).build());
+        recoveryButton = addRenderableWidget(Button.builder(
+                        Component.translatable("foundation.gui.recovery.clear"),
+                        button -> recover())
+                .bounds(leftPos + 12, topPos + 204, 88, 20).build());
         addRenderableWidget(Button.builder(
                         Component.translatable("foundation.gui.close"), button -> onClose())
                 .bounds(leftPos + 196, topPos + 204, 100, 20).build());
@@ -125,12 +136,14 @@ public final class DiagnosticsScreen extends AbstractContainerScreen<Diagnostics
         detailView = false;
         healthTab = false;
         adminTab = false;
+        recoveryConfirmationPending = false;
     }
 
     private void selectHealth() {
         detailView = false;
         healthTab = true;
         adminTab = false;
+        recoveryConfirmationPending = false;
     }
 
     private void selectAdmin() {
@@ -141,6 +154,33 @@ public final class DiagnosticsScreen extends AbstractContainerScreen<Diagnostics
         } else {
             adminTab = false;
         }
+    }
+
+    private void recover() {
+        if (!menu.snapshot().map(this::recoveryAllowed).orElse(false)
+                || menu.recoveryInFlight()) {
+            recoveryConfirmationPending = false;
+            return;
+        }
+        if (!recoveryConfirmationPending) {
+            recoveryConfirmationPending = true;
+            return;
+        }
+        DiagnosticsSnapshot snapshot = menu.snapshot().orElse(null);
+        if (snapshot == null) {
+            recoveryConfirmationPending = false;
+            return;
+        }
+        RequestId requestId = RequestId.of("gui-recovery-request-" + UUID.randomUUID());
+        OperationId operationId = OperationId.of("gui-recovery-operation-" + UUID.randomUUID());
+        if (!menu.beginRecovery(requestId)) {
+            recoveryConfirmationPending = false;
+            return;
+        }
+        FoundationNetwork.sendToServer(new ClearDiagnosticsSessionsPacket(
+                FoundationMutationEnvelope.of(
+                        requestId, operationId, snapshot.sessionId(), snapshot.revision())));
+        recoveryConfirmationPending = false;
     }
 
     private void refresh() {
@@ -201,12 +241,14 @@ public final class DiagnosticsScreen extends AbstractContainerScreen<Diagnostics
 
     private void updateTabVisibility() {
         boolean allowed = menu.snapshot().map(DiagnosticsSnapshot::adminAllowed).orElse(false);
+        boolean recoveryAllowed = menu.snapshot().map(this::recoveryAllowed).orElse(false);
         if (!allowed) {
             adminTab = false;
             if (detailView && detailSourceAdmin) {
                 detailView = false;
                 detailValues = List.of();
             }
+            recoveryConfirmationPending = false;
         }
         boolean listView = !detailView;
         overviewButton.visible = listView;
@@ -219,16 +261,24 @@ public final class DiagnosticsScreen extends AbstractContainerScreen<Diagnostics
         detailPreviousButton.visible = detailView && canMoveDetail(-1);
         detailNextButton.visible = detailView && canMoveDetail(1);
         detailButton.visible = listView && !detailValues.isEmpty();
+        boolean recoverySucceeded = menu.recoveryResult()
+                .map(DiagnosticsRecoveryResult::accepted).orElse(false);
+        recoveryButton.visible = listView && adminTab && recoveryAllowed && !recoverySucceeded;
         overviewButton.active = overviewButton.visible;
         healthButton.active = healthButton.visible;
         adminButton.active = adminButton.visible;
         previousHealthButton.active = previousHealthButton.visible;
         nextHealthButton.active = nextHealthButton.visible;
-        refreshButton.active = refreshButton.visible;
+        refreshButton.active = refreshButton.visible && !menu.recoveryInFlight();
         detailsBackButton.active = detailsBackButton.visible;
         detailPreviousButton.active = detailPreviousButton.visible;
         detailNextButton.active = detailNextButton.visible;
         detailButton.active = detailButton.visible;
+        recoveryButton.active = recoveryButton.visible && !menu.recoveryInFlight();
+        recoveryButton.setMessage(Component.translatable(
+                recoveryConfirmationPending
+                        ? "foundation.gui.recovery.confirm"
+                        : "foundation.gui.recovery.clear"));
         if (listView) {
             healthPage = Math.min(healthPage, healthPageCount() - 1);
         } else if (!detailValues.isEmpty()) {
@@ -284,9 +334,53 @@ public final class DiagnosticsScreen extends AbstractContainerScreen<Diagnostics
                 renderHealth(graphics, snapshot);
             } else {
                 renderValues(graphics, adminTab ? snapshot.adminValues() : snapshot.publicValues());
+                if (adminTab && recoveryAllowed(snapshot)) {
+                    renderRecoveryInfo(graphics);
+                }
             }
         });
+        menu.recoveryResult().ifPresent(result -> renderRecoveryResult(graphics, result));
         menu.errorMessageKey().ifPresent(key -> renderError(graphics, key));
+    }
+
+    private boolean recoveryAllowed(DiagnosticsSnapshot snapshot) {
+        return snapshot.adminAllowed()
+                && "available".equals(snapshot.adminValues().get("recovery_command"));
+    }
+
+    private void renderRecoveryInfo(GuiGraphics graphics) {
+        drawBounded(graphics, Component.translatable("foundation.gui.recovery.operation"),
+                16, 82, 288, 0xE6EDF3);
+        drawBounded(graphics, Component.translatable("foundation.gui.recovery.reason"),
+                16, 94, 288, 0xE6EDF3);
+        drawBounded(graphics, Component.translatable("foundation.gui.recovery.irreversible"),
+                16, 106, 288, 0xFFB86B);
+        Component state = menu.recoveryInFlight()
+                ? Component.translatable("foundation.gui.recovery.pending")
+                : menu.recoveryResult().isPresent()
+                        ? Component.translatable("foundation.gui.recovery.result_received")
+                        : Component.translatable("foundation.gui.recovery.confirmation_required");
+        drawBounded(graphics, state, 16, 118, 288, 0xE6EDF3);
+    }
+
+    private void renderRecoveryResult(GuiGraphics graphics, DiagnosticsRecoveryResult result) {
+        Component message;
+        int color;
+        if (result.accepted()) {
+            Component audit = translatedOrLiteral(
+                    "foundation.audit." + result.auditDisposition().name().toLowerCase(Locale.ROOT),
+                    result.auditDisposition().name().toLowerCase(Locale.ROOT));
+            message = Component.translatable("foundation.gui.recovery.result.success", audit);
+            color = 0xFF8CE99A;
+        } else {
+            String errorKey = result.error()
+                    .map(error -> error.messageKey())
+                    .orElse("foundation.error.internal_failure");
+            message = Component.translatable("foundation.gui.recovery.result.denied",
+                    Component.translatable(errorKey));
+            color = 0xFFFF6B6B;
+        }
+        drawBounded(graphics, message, 16, 136, 288, color);
     }
 
     private void renderError(GuiGraphics graphics, String messageKey) {

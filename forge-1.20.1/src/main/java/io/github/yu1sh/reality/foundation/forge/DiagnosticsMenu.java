@@ -2,8 +2,10 @@ package io.github.yu1sh.reality.foundation.forge;
 
 import io.github.yu1sh.reality.foundation.api.DiagnosticsDelta;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsApplicationService;
+import io.github.yu1sh.reality.foundation.api.DiagnosticsRecoveryResult;
 import io.github.yu1sh.reality.foundation.api.DiagnosticsSnapshot;
 import io.github.yu1sh.reality.identity.ActorId;
+import io.github.yu1sh.reality.identity.RequestId;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -12,13 +14,16 @@ import net.minecraft.world.item.ItemStack;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Read-only native container; all state is received from the server. */
+/** Native container; projection and recovery results remain server-owned. */
 public final class DiagnosticsMenu extends AbstractContainerMenu {
     private DiagnosticsSnapshot snapshot;
     private String errorMessageKey;
     private final DiagnosticsApplicationService diagnostics;
     private final ActorId serverActor;
     private boolean lifecycleInvalidated;
+    private RequestId recoveryRequestId;
+    private boolean recoveryInFlight;
+    private DiagnosticsRecoveryResult recoveryResult;
 
     public DiagnosticsMenu(int windowId, Inventory inventory) {
         this(windowId, inventory, null, null, null);
@@ -78,6 +83,38 @@ public final class DiagnosticsMenu extends AbstractContainerMenu {
 
     public Optional<String> errorMessageKey() {
         return Optional.ofNullable(errorMessageKey);
+    }
+
+    /** Records the one client-generated request ID awaiting a server result. */
+    public boolean beginRecovery(RequestId requestId) {
+        if (requestId == null || recoveryInFlight
+                || recoveryResult.map(DiagnosticsRecoveryResult::accepted).orElse(false)) {
+            return false;
+        }
+        recoveryRequestId = requestId;
+        recoveryInFlight = true;
+        recoveryResult = null;
+        return true;
+    }
+
+    /** Applies only the result correlated with the request this menu sent. */
+    public void applyRecoveryResult(RequestId requestId, DiagnosticsRecoveryResult result) {
+        Objects.requireNonNull(requestId, "requestId");
+        Objects.requireNonNull(result, "result");
+        if (!recoveryInFlight || !requestId.equals(recoveryRequestId)) {
+            return;
+        }
+        recoveryRequestId = null;
+        recoveryInFlight = false;
+        recoveryResult = result;
+    }
+
+    public boolean recoveryInFlight() {
+        return recoveryInFlight;
+    }
+
+    public Optional<DiagnosticsRecoveryResult> recoveryResult() {
+        return Optional.ofNullable(recoveryResult);
     }
 
     @Override

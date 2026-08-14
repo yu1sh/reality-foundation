@@ -122,7 +122,7 @@ public final class FoundationForgeEvents {
             return 0;
         }
         // The command adapter uses the identical server-side application
-        // mutation path as a future GUI action. Both actor and permission are
+        // mutation path as the GUI action. Both actor and permission are
         // projected from CommandSourceStack/ServerPlayer, never from packet
         // fields or command arguments.
         DiagnosticsRecoveryResult result = state.context().diagnostics().clearSessions(

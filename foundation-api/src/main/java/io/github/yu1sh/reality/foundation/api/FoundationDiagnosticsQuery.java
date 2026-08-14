@@ -59,7 +59,12 @@ public final class FoundationDiagnosticsQuery {
             adminValues.put("context_state", "active");
             adminValues.put("registry_close_order", "reverse_registration");
             adminValues.put("session_validation", "actor_expiry_rate_revision");
-            adminValues.put("recovery_command", "available");
+            // Presence of this server-issued projection key is the GUI's
+            // recovery eligibility signal. Permission level 2 may inspect
+            // diagnostics, but only level 4 may be offered the mutation.
+            if (actor.permissionLevel() >= 4) {
+                adminValues.put("recovery_command", "available");
+            }
         }
         return DiagnosticsSnapshot.of(
                 sessionId,
