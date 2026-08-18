@@ -75,5 +75,11 @@
   "foundation.health.healthy": "正常",
   "foundation.health.degraded": "低下",
   "foundation.health.unavailable": "利用不可",
-  "foundation.health.not_configured": "監査連携は未設定です"
+  "foundation.health.not_configured": "監査連携は未設定です",
+  "foundation.health.integration.available": "実行時エンドポイントは利用可能です",
+  "foundation.health.integration.missing": "必要な実行時エンドポイントが不足しています",
+  "foundation.health.integration.incompatible": "実行時エンドポイントのバージョンが非互換です",
+  "foundation.health.integration.duplicate": "実行時エンドポイントが重複登録されています",
+  "foundation.health.integration.initialization_failed": "実行時サービスの初期化に失敗しました",
+  "foundation.health.integration.malformed": "実行時状態レポートが不正です"
 }

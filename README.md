@@ -75,6 +75,38 @@ text in addition to color, and a compact layout that tolerates larger text.
 No coordinate, JDBC detail, host, filesystem path, secret, or private player
 field is included in a public projection. Streamer mode hides admin details.
 
+## P-05/P-07/P-08 integration health
+
+The Forge adapter receives one bounded `foundation_health_v1` Forge IMC report
+from each member of the published P-05/P-07/P-08 deployment set. The report is
+an internal server-to-server runtime boundary, not a client packet and not a
+new command or Foundation-owned gameplay API.
+
+| Service projection | Owner | Runtime report | Required boundary |
+| --- | --- | --- | --- |
+| `foundation.integration.reality.quests` | P-05 | consumer registration state plus P-05 status/admin contract `2` | P-07 reward scope/receive `v2`; P-08 consume `v2` and recovery `v1` |
+| `foundation.integration.reality.economy` | P-07 | provider endpoint/version and lifecycle state | reward scope/receive `v2` |
+| `foundation.integration.reality.inventory` | P-08 | provider endpoint/version and lifecycle state | consume `v2`; recovery `v1` |
+
+Foundation registers these projections through the existing
+`FoundationServiceContributor` and `HealthAwareService` seam. P-05 owns the
+consumer-side registration result; P-07 and P-08 own their provider reports.
+Foundation owns only aggregation and the redacted status projection. A
+missing, malformed, duplicated, old-version, or initialization-failed report
+becomes `UNAVAILABLE` or `DEGRADED` for that projection and does not prevent
+the other projections or the Foundation context from starting.
+
+The report supplier is evaluated against the active `MinecraftServer` when the
+server-produced health snapshot is queried, so normal `ServerStarted` recovery
+and failure state are reflected without caching player, inventory, reward,
+FROZEN, operation-key, exception, Git SHA, or repository data. Integration
+health is admin-only: non-admin and streamer-mode projections receive neither
+these service entries nor their detail. `/realityfoundation status` and the
+existing System Status GUI receive the same administrator `serviceHealth`
+projection, including the same session, revision, permission, and replay
+validation. Server stop closes the context before unbinding the active health
+server; no child endpoint is closed or mutated by Foundation.
+
 ## Server commands
 
 - `/realityfoundation status` uses the same `FoundationDiagnosticsQuery` as

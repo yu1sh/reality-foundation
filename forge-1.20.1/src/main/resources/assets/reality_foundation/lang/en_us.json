@@ -75,5 +75,11 @@
   "foundation.health.healthy": "Healthy",
   "foundation.health.degraded": "Degraded",
   "foundation.health.unavailable": "Unavailable",
-  "foundation.health.not_configured": "Audit integration is not configured"
+  "foundation.health.not_configured": "Audit integration is not configured",
+  "foundation.health.integration.available": "Runtime endpoints available",
+  "foundation.health.integration.missing": "Required runtime endpoint is missing",
+  "foundation.health.integration.incompatible": "Runtime endpoint version is incompatible",
+  "foundation.health.integration.duplicate": "Runtime endpoint registration is duplicated",
+  "foundation.health.integration.initialization_failed": "Runtime service initialization failed",
+  "foundation.health.integration.malformed": "Runtime health report is invalid"
 }

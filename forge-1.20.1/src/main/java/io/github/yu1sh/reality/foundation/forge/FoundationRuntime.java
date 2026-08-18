@@ -6,6 +6,7 @@ import io.github.yu1sh.reality.foundation.api.FoundationServiceContributorRegist
 import io.github.yu1sh.reality.foundation.api.NoopAuditPort;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.fml.event.lifecycle.InterModProcessEvent;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -20,6 +21,7 @@ public final class FoundationRuntime {
     private final RealityServerContextManager contexts = new RealityServerContextManager();
     private final FoundationServiceContributorRegistry contributors =
             new FoundationServiceContributorRegistry();
+    private final FoundationIntegrationHealth integrationHealth = new FoundationIntegrationHealth();
     private final DefaultFoundationServerPreferencePort defaultPreferences =
             new DefaultFoundationServerPreferencePort();
     private FoundationServerPreferencePort preferencePort = defaultPreferences;
@@ -29,6 +31,14 @@ public final class FoundationRuntime {
     private boolean auditPortInstalled;
     private boolean preferencePortInstalled;
     private boolean started;
+
+    public FoundationRuntime() {
+        contributors.register(integrationHealth);
+    }
+
+    public void processInterModMessages(InterModProcessEvent event) {
+        integrationHealth.processInterModMessages(event);
+    }
 
     public void serverStarting(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
@@ -43,10 +53,16 @@ public final class FoundationRuntime {
             selectedAuditPort = auditPort;
             selectedPreferencePort = preferencePort;
         }
+        integrationHealth.bindServer(server);
         // ContextManager owns the identity reservation and invokes external
         // contributors outside its own monitor. Do not hold the composition
         // monitor across that callback either.
-        contexts.start(server, selectedAuditPort, contributors, selectedPreferencePort);
+        try {
+            contexts.start(server, selectedAuditPort, contributors, selectedPreferencePort);
+        } catch (RuntimeException failure) {
+            integrationHealth.clearServer(server);
+            throw failure;
+        }
     }
 
     /**
@@ -76,7 +92,12 @@ public final class FoundationRuntime {
     }
 
     public void serverStopping(MinecraftServer server) {
-        contexts.stop(Objects.requireNonNull(server, "server"));
+        MinecraftServer checked = Objects.requireNonNull(server, "server");
+        try {
+            contexts.stop(checked);
+        } finally {
+            integrationHealth.clearServer(checked);
+        }
     }
 
     /**

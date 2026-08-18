@@ -44,7 +44,10 @@ public final class FoundationDiagnosticsQuery {
         Objects.requireNonNull(actor, "actor");
         Objects.requireNonNull(connectionState, "connectionState");
 
-        List<ServiceHealth> health = registry.healthSnapshot();
+        List<ServiceHealth> health = registry.healthSnapshot().stream()
+                .filter(item -> actor.mayViewAdminDiagnostics()
+                        || !item.serviceId().startsWith("foundation.integration."))
+                .toList();
         Map<String, String> publicValues = new LinkedHashMap<>();
         publicValues.put("foundation.connection", connectionState.name().toLowerCase());
         publicValues.put("foundation.protocol", Integer.toString(FoundationVersion.NETWORK_PROTOCOL));

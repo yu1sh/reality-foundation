@@ -20,6 +20,7 @@ public final class RealityFoundationMod {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
         FoundationMenus.MENUS.register(modBus);
         FoundationNetwork.register();
+        modBus.addListener(runtime::processInterModMessages);
         MinecraftForge.EVENT_BUS.register(new FoundationForgeEvents(runtime));
         DistExecutor.unsafeRunWhenOn(net.minecraftforge.api.distmarker.Dist.CLIENT,
                 () -> () -> FoundationClient.register(modBus, runtime));
